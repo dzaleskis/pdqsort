@@ -486,7 +486,7 @@ namespace pdqsort_detail {
             // the right-hand partition.
             pdqsort_loop<Iter, Compare, Branchless>(begin, pivot_pos, comp, bad_allowed, left_size);
             begin = pivot_pos + 1;
-            left_size += l_size;
+            left_size += l_size + 1;
         }
     }
 }
