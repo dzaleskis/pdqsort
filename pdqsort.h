@@ -397,7 +397,7 @@ namespace pdqsort_detail {
 
 
     template<class Iter, class Compare, bool Branchless>
-    inline void pdqsort_loop(Iter begin, Iter end, Compare comp, int bad_allowed, bool leftmost = true) {
+    inline void pdqsort_loop(Iter begin, Iter end, Compare comp, int bad_allowed, int left_size = 0) {
         typedef typename std::iterator_traits<Iter>::difference_type diff_t;
 
         // Use a while loop for tail recursion elimination.
@@ -406,7 +406,7 @@ namespace pdqsort_detail {
 
             // Insertion sort is faster for small arrays.
             if (size < insertion_sort_threshold) {
-                if (leftmost) insertion_sort(begin, end, comp);
+                if (left_size == 0) insertion_sort(begin, end, comp);
                 else unguarded_insertion_sort(begin, end, comp);
                 return;
             }
@@ -426,7 +426,7 @@ namespace pdqsort_detail {
             // pivot compares equal to *(begin - 1) we change strategy, putting equal elements in
             // the left partition, greater elements in the right partition. We do not have to
             // recurse on the left partition, since it's sorted (all equal).
-            if (!leftmost && !comp(*(begin - 1), *begin)) {
+            if (left_size > 0 && !comp(*(begin - 1), *begin)) {
                 begin = partition_left(begin, end, comp) + 1;
                 continue;
             }
@@ -484,9 +484,9 @@ namespace pdqsort_detail {
                 
             // Sort the left partition first using recursion and do tail recursion elimination for
             // the right-hand partition.
-            pdqsort_loop<Iter, Compare, Branchless>(begin, pivot_pos, comp, bad_allowed, leftmost);
+            pdqsort_loop<Iter, Compare, Branchless>(begin, pivot_pos, comp, bad_allowed, left_size);
             begin = pivot_pos + 1;
-            leftmost = false;
+            left_size += l_size;
         }
     }
 }
