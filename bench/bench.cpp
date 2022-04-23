@@ -9,7 +9,7 @@
 #include <functional>
 #include <string>
 
-#include "../pdqsort.h"
+#include "../pdqsort2.h"
 #include "timsort.h"
 
 #ifdef _WIN32
@@ -117,8 +117,8 @@ int main() {
     };
 
     std::pair<std::string, SortF> sorts[] = {
-        {"pdqsort", &pdqsort<std::vector<int>::iterator, std::less<int>>},
-        {"std::sort", &std::sort<std::vector<int>::iterator, std::less<int>>},
+        {"pdqsort2", &pdqsort2<std::vector<int>::iterator, std::less<int>>},
+//        {"std::sort", &std::sort<std::vector<int>::iterator, std::less<int>>},
         // {"std::stable_sort", &std::stable_sort<std::vector<int>::iterator, std::less<int>>},
         // {"std::sort_heap", &heapsort<std::vector<int>::iterator, std::less<int>>},
         // {"timsort", &gfx::timsort<std::vector<int>::iterator, std::less<int>>}
@@ -151,8 +151,6 @@ int main() {
 
                 std::sort(cycles.begin(), cycles.end());
 
-                std::cerr << size << " " << distribution.first << " " << sort.first
-                          << " " << cycles[cycles.size()/2] << "\n";
                 std::cout << size << " " << distribution.first << " " << sort.first
                           << " " << cycles[cycles.size()/2] << "\n";
             }

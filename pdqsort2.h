@@ -40,8 +40,7 @@
 
 namespace pdqsort_detail {
     enum {
-        // Partitions below this size are sorted using insertion sort.
-        insertion_sort_threshold = 24,
+        shell_sort_threshold = 64,
 
         // Partitions above this size use Tukey's ninther to select the pivot.
         ninther_threshold = 128,
@@ -72,49 +71,79 @@ namespace pdqsort_detail {
         return log;
     }
 
-    // Sorts [begin, end) using insertion sort with the given comparison function.
+    // Runs an insertion pass on [begin, end) with the given comparison function.
     template<class Iter, class Compare>
-    inline void insertion_sort(Iter begin, Iter end, Compare comp) {
+    inline void guarded_insertion_pass(Iter begin, Iter end, Compare comp, int gap) {
         typedef typename std::iterator_traits<Iter>::value_type T;
-        if (begin == end) return;
+        if (end - begin < gap) return;
 
-        for (Iter cur = begin + 1; cur != end; ++cur) {
+        for (Iter cur = begin + gap; cur != end; ++cur) {
             Iter sift = cur;
-            Iter sift_1 = cur - 1;
+            Iter sift_1 = cur - gap;
 
             // Compare first so we can avoid 2 moves for an element already positioned correctly.
             if (comp(*sift, *sift_1)) {
                 T tmp = PDQSORT_PREFER_MOVE(*sift);
 
-                do { *sift-- = PDQSORT_PREFER_MOVE(*sift_1); }
-                while (sift != begin && comp(tmp, *--sift_1));
+                do {
+                    *sift = PDQSORT_PREFER_MOVE(*sift_1);
+                    sift -= gap;
+                }
+                while (sift - begin >= gap && comp(tmp, *(sift_1 -= gap)));
 
                 *sift = PDQSORT_PREFER_MOVE(tmp);
             }
         }
     }
 
-    // Sorts [begin, end) using insertion sort with the given comparison function. Assumes
-    // *(begin - 1) is an element smaller than or equal to any element in [begin, end).
+    // Runs an insertion pass on [begin, end) with the given comparison function. Assumes
+    // *(begin - gap) is an element smaller than or equal to any element in [begin, end).
     template<class Iter, class Compare>
-    inline void unguarded_insertion_sort(Iter begin, Iter end, Compare comp) {
+    inline void unguarded_insertion_pass(Iter begin, Iter end, Compare comp, int gap) {
         typedef typename std::iterator_traits<Iter>::value_type T;
-        if (begin == end) return;
+        if (end - begin < gap) return;
 
-        for (Iter cur = begin + 1; cur != end; ++cur) {
+        for (Iter cur = begin + gap; cur != end; ++cur) {
             Iter sift = cur;
-            Iter sift_1 = cur - 1;
+            Iter sift_1 = cur - gap;
 
             // Compare first so we can avoid 2 moves for an element already positioned correctly.
             if (comp(*sift, *sift_1)) {
                 T tmp = PDQSORT_PREFER_MOVE(*sift);
 
-                do { *sift-- = PDQSORT_PREFER_MOVE(*sift_1); }
-                while (comp(tmp, *--sift_1));
+                do {
+                    *sift = PDQSORT_PREFER_MOVE(*sift_1);
+                    sift -= gap;
+                }
+                while (comp(tmp, *(sift_1 -= gap)));
 
                 *sift = PDQSORT_PREFER_MOVE(tmp);
             }
         }
+    }
+
+    // Runs a bubble pass on [begin, end) with the given comparison function.
+    template<class Iter, class Compare>
+    inline void bubble_pass(Iter begin, Iter end, Compare comp, int gap) {
+        if (end - begin < gap) return;
+        Iter loopEnd = end - gap;
+
+        for (Iter cur = begin; cur != loopEnd; ++cur) {
+            Iter next = cur + gap;
+
+            if (comp(*cur, *next)) {
+                std::swap(*cur, *next);
+            }
+        }
+    }
+
+    // Sorts [begin, end) using shell sort with the given comparison function.
+    // Decides whether to use guarded or unguarded passes based on amount of already sorted elements on the left.
+    template<class Iter, class Compare>
+    inline void shell_sort(Iter begin, Iter end, Compare comp, std::size_t sorted_elements) {
+        bubble_pass(begin, end, comp, 15);
+        bubble_pass(begin, end, comp, 3);
+        sorted_elements >= 1 ? unguarded_insertion_pass(begin, end, comp, 1) : guarded_insertion_pass(begin, end, comp, 1);
     }
 
     // Attempts to use insertion sort on [begin, end). Will return false if more than
@@ -397,7 +426,7 @@ namespace pdqsort_detail {
 
 
     template<class Iter, class Compare, bool Branchless>
-    inline void pdqsort_loop(Iter begin, Iter end, Compare comp, int bad_allowed, int left_size = 0) {
+    inline void pdqsort_loop(Iter begin, Iter end, Compare comp, int bad_allowed, std::size_t sorted_elements = 0) {
         typedef typename std::iterator_traits<Iter>::difference_type diff_t;
 
         // Use a while loop for tail recursion elimination.
@@ -405,9 +434,8 @@ namespace pdqsort_detail {
             diff_t size = end - begin;
 
             // Insertion sort is faster for small arrays.
-            if (size < insertion_sort_threshold) {
-                if (left_size == 0) insertion_sort(begin, end, comp);
-                else unguarded_insertion_sort(begin, end, comp);
+            if (size < shell_sort_threshold) {
+                shell_sort(begin, end, comp, sorted_elements);
                 return;
             }
 
@@ -426,7 +454,7 @@ namespace pdqsort_detail {
             // pivot compares equal to *(begin - 1) we change strategy, putting equal elements in
             // the left partition, greater elements in the right partition. We do not have to
             // recurse on the left partition, since it's sorted (all equal).
-            if (left_size > 0 && !comp(*(begin - 1), *begin)) {
+            if (sorted_elements > 0 && !comp(*(begin - 1), *begin)) {
                 begin = partition_left(begin, end, comp) + 1;
                 continue;
             }
@@ -452,7 +480,7 @@ namespace pdqsort_detail {
                     return;
                 }
 
-                if (l_size >= insertion_sort_threshold) {
+                if (l_size >= shell_sort_threshold) {
                     std::iter_swap(begin,             begin + l_size / 4);
                     std::iter_swap(pivot_pos - 1, pivot_pos - l_size / 4);
 
@@ -464,7 +492,7 @@ namespace pdqsort_detail {
                     }
                 }
                 
-                if (r_size >= insertion_sort_threshold) {
+                if (r_size >= shell_sort_threshold) {
                     std::iter_swap(pivot_pos + 1, pivot_pos + (1 + r_size / 4));
                     std::iter_swap(end - 1,                   end - r_size / 4);
                     
@@ -484,16 +512,16 @@ namespace pdqsort_detail {
                 
             // Sort the left partition first using recursion and do tail recursion elimination for
             // the right-hand partition.
-            pdqsort_loop<Iter, Compare, Branchless>(begin, pivot_pos, comp, bad_allowed, left_size);
+            pdqsort_loop<Iter, Compare, Branchless>(begin, pivot_pos, comp, bad_allowed, sorted_elements);
             begin = pivot_pos + 1;
-            left_size += l_size + 1;
+            sorted_elements += l_size + 1;
         }
     }
 }
 
 
 template<class Iter, class Compare>
-inline void pdqsort(Iter begin, Iter end, Compare comp) {
+inline void pdqsort2(Iter begin, Iter end, Compare comp) {
     if (begin == end) return;
 
 #if __cplusplus >= 201103L
@@ -508,22 +536,22 @@ inline void pdqsort(Iter begin, Iter end, Compare comp) {
 }
 
 template<class Iter>
-inline void pdqsort(Iter begin, Iter end) {
+inline void pdqsort2(Iter begin, Iter end) {
     typedef typename std::iterator_traits<Iter>::value_type T;
-    pdqsort(begin, end, std::less<T>());
+    pdqsort2(begin, end, std::less<T>());
 }
 
 template<class Iter, class Compare>
-inline void pdqsort_branchless(Iter begin, Iter end, Compare comp) {
+inline void pdqsort2_branchless(Iter begin, Iter end, Compare comp) {
     if (begin == end) return;
     pdqsort_detail::pdqsort_loop<Iter, Compare, true>(
         begin, end, comp, pdqsort_detail::log2(end - begin));
 }
 
 template<class Iter>
-inline void pdqsort_branchless(Iter begin, Iter end) {
+inline void pdqsort2_branchless(Iter begin, Iter end) {
     typedef typename std::iterator_traits<Iter>::value_type T;
-    pdqsort_branchless(begin, end, std::less<T>());
+    pdqsort2_branchless(begin, end, std::less<T>());
 }
 
 
