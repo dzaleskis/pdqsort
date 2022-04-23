@@ -96,8 +96,8 @@ namespace pdqsort_detail {
         }
     }
 
-    // Runs an insertion pass on [begin, end) with the given comparison function. Assumes
-    // *(begin - gap) is an element smaller than or equal to any element in [begin, end).
+    // Runs an insertion pass on [begin, end) with the given comparison function.
+    // Assumes *(begin - gap) is an element smaller than or equal to any element in [begin, end).
     template<class Iter, class Compare>
     inline void unguarded_insertion_pass(Iter begin, Iter end, Compare comp, int gap) {
         typedef typename std::iterator_traits<Iter>::value_type T;
